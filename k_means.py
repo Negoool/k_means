@@ -9,6 +9,7 @@ import  sklearn.metrics.pairwise
 from sklearn.neighbors import NearestNeighbors
 import copy
 import time
+import json
 
 import json
 import os
@@ -47,6 +48,7 @@ tf_idf = normalize(tf_idf)
 
 
 # initialize cluster centers
+# we develope a smarter initialization later
 def get_initial_centroids(data, k, seed = None):
     ''' randomly choose k data points as initial centroids'''
     if seed is not None:
@@ -110,6 +112,8 @@ def kmeans( data, k, initial_centroids, max_iter, verbose = False, heterogeneity
     max_iter: maximum number of iteration till stopping
     verbose : if true print heterogeneity number of changes in assignments for
     each iteration
+    heterogeneity_history : if an empty list with a given name is provided
+    the result is saved to that list
     Outout:
     z and centroids : assinments to clusters and  center of clusters
     heterogeneity_history and number_changes for observing convergence
@@ -149,41 +153,54 @@ def kmeans( data, k, initial_centroids, max_iter, verbose = False, heterogeneity
             break
     return z, centroids
 
-# k = 3
-# initial_centroids = get_initial_centroids(tf_idf, k, seed = 0)
-# (a,b,c,d) = kmeans( tf_idf, k, initial_centroids, 15)
-# for i in range(k):
-#     print sum(a == i)
-# # plot "number of changes in assignments" & heterogeneity across iteration
-# plt.plot(c, linewidth = 4)
-# plt.xlabel('# of iteration')
-# plt.ylabel('heterogeneity')
-# plt.figure()
-# plt.plot(d, linewidth = 4)
-# plt.xlabel('iteration')
-# plt.ylabel('number of changes in assignments')
-# plt.show()
 
-# k = 10
-# start = time.time()
-# b = []
-# heterogeneity = []
-# for seed in [0, 20000, 40000, 60000, 80000, 100000, 120000]:
-#     initial_centroids = get_initial_centroids(tf_idf, k, seed )
-#     z, centroids= kmeans( tf_idf, k, initial_centroids, max_iter =400 )
-#     quality = compute_heterogeneity(tf_idf, z, centroids, k)
-#     print " seed : % 10d , final heterogeneity : %10f " %( seed, quality )
-#     heterogeneity.append(quality)
-#     a = []
-#     for i in range(k):
-#         a.append(sum(z == i))
-#     b.append((min(a), max(a)))
-# stop = time.time()
-# print (stop - start)
-# print b
+# this part shows the convergence of k_means and how heterogeneity and
+# assignments change as iteration goes
+# from the plotting it is obviouse that heterogeneity is non-increasing function
+show_result_1 = 0
+if show_result_1 == 1:
+    k = 3
+    initial_centroids = get_initial_centroids(tf_idf, k, seed = 0)
+    (a,b) = kmeans( tf_idf, k, initial_centroids, 300)
+    for i in range(k):
+        print sum(a == i)
+    # plot "number of changes in assignments" & heterogeneity across iteration
+    plt.plot(c, linewidth = 4)
+    plt.xlabel('# of iteration')
+    plt.ylabel('heterogeneity')
+    plt.figure()
+    plt.plot(d, linewidth = 4)
+    plt.xlabel('iteration')
+    plt.ylabel('number of changes in assignments')
+    plt.show()
+
+
+# this results show how k_means can stuck in local minima
+# to show this we use different seeds to start from different initial_centroids
+# this ends to different heterogeneity & distribution of cluster assignments
+show_result_2 = 0
+if show_result_2 == 1:
+    k = 10
+    start = time.time()
+    b = []
+    heterogeneity = []
+    for seed in [0, 20000, 40000, 60000, 80000, 100000, 120000]:
+        initial_centroids = get_initial_centroids(tf_idf, k, seed )
+        z, centroids= kmeans( tf_idf, k, initial_centroids, max_iter =400 )
+        quality = compute_heterogeneity(tf_idf, z, centroids, k)
+        print " seed : % 10d , final heterogeneity : %10f " %( seed, quality )
+        heterogeneity.append(quality)
+        a = []
+        for i in range(k):
+            a.append(sum(z == i))
+        b.append((min(a), max(a)))
+    stop = time.time()
+    print (stop - start)
+    print b
 
 
 def smart_initialization(data, k , seed = None):
+    '''Use k-means++ to initialize a good set of centroids'''
     if seed is not None:
         np.random.seed(seed)
     # as first centroid, randomly select one of the data points
@@ -211,30 +228,36 @@ def smart_initialization(data, k , seed = None):
     initial_centroids = data[c].toarray()
     return initial_centroids
 
-# print "-"*70
-# print " results with smart initialization"
-# k = 10
-# c = []
-# heterogeneity_smart = []
-# start = time.time()
-# for seed in [0, 20000, 40000, 60000, 80000, 100000, 120000]:
-#     initial_centroids = smart_initialization(tf_idf, k, seed )
-#     z, centroids = kmeans( tf_idf, k, initial_centroids, max_iter =400 )
-#     quality = compute_heterogeneity(tf_idf, z, centroids, k)
-#     print " seed : % 10d , final heterogeneity : %10f " %( seed,quality )
-#     heterogeneity_smart.append(quality)
-#     a = []
-#     for i in range(k):
-#         a.append(sum(z == i))
-#     c.append((min(a), max(a)))
-# stop = time.time()
-# print (stop - start)
-# print c
+# we use the same situation as show_result_2 but smart initialization
+# the result show that
+# On average, k-means++ produces a better clustering than Random initialization
+# Variation in clustering quality is smaller for k-means++
+show_result_3 =0
+if show_result_3 == 1 :
+    print " results with smart initialization"
+    k = 10
+    c = []
+    heterogeneity_smart = []
+    start = time.time()
+    for seed in [0, 20000, 40000, 60000, 80000, 100000, 120000]:
+        initial_centroids = smart_initialization(tf_idf, k, seed )
+        z, centroids = kmeans( tf_idf, k, initial_centroids, max_iter =400 )
+        quality = compute_heterogeneity(tf_idf, z, centroids, k)
+        print " seed : % 10d , final heterogeneity : %10f " %( seed,quality )
+        heterogeneity_smart.append(quality)
+        a = []
+        for i in range(k):
+            a.append(sum(z == i))
+        c.append((min(a), max(a)))
+    stop = time.time()
+    print (stop - start)
+    print c
+    plt.boxplot([heterogeneity, heterogeneity_smart], vert=False)
+    plt.yticks([1, 2], ['k-means', 'k-means++'])
+    plt.show()
 
-# plt.boxplot([heterogeneity, heterogeneity_smart], vert=False)
-# plt.yticks([1, 2], ['k-means', 'k-means++'])
-# plt.show()
 
+# the below function is what happens in reality
 def kmeans_multiple_runs( data, k, num_runs, max_iter, seed_list = None, verbose = False):
     ''' run kmeans for multiple seeds with smart initialization and select\
     the result of the one leadinig to less heterogeneity
@@ -282,35 +305,41 @@ def kmeans_multiple_runs( data, k, num_runs, max_iter, seed_list = None, verbose
 
     return(best_assignments, best_centroids, min_heterogeneity)
 
-# start = time.time()
-# k_list = [2, 10, 25, 50, 100]
-# seed_list = [0, 20000, 40000, 60000, 80000, 100000, 120000]
-# centroids_dic = {}
-# assinments_dic = {}
-# heterogeneity_values =[]
-# for k in k_list:
-#     (z,c,h) = kmeans_multiple_runs( tf_idf, k, len(seed_list), 400, seed_list = seed_list, verbose = False)
-#     centroids_dic[k] = c
-#     assinments_dic[k] = z
-#     heterogeneity_values.append(h)
-#     print " k : % 10d , heterogeneity : %15s " %(k,h)
-#
-# plt.plot(k_list, heterogeneity_values)
-# stop = time.time()
-# print " it took to complete code", (stop - start)
-# plt.show()
+# selection of k
+# it takes a long time
+show_result_4 = 0
+if show_result_4 == 1:
+    start = time.time()
+    k_list = [2, 10, 25, 50, 100]
+    seed_list = [0, 20000, 40000, 60000, 80000, 100000, 120000]
+    centroids_dic = {}
+    assinments_dic = {}
+    heterogeneity_values =[]
+    for k in k_list:
+        (z,c,h) = kmeans_multiple_runs( tf_idf, k, len(seed_list), 400, seed_list = seed_list, verbose = False)
+        centroids_dic[k] = c
+        assinments_dic[k] = z
+        heterogeneity_values.append(h)
+        print " k : % 10d , heterogeneity : %15s " %(k,h)
 
-# with precomputed numpy array do the same: z,center, heterogeneity
+    plt.plot(k_list, heterogeneity_values)
+    stop = time.time()
+    print " it took to complete code", (stop - start)
+    plt.show()
+
+
+
+# use precomputed numpy array do the same: z,center, heterogeneity
 k_list = [2, 10, 25, 50, 100]
 arrays = np.load('kmeans-arrays.npz')
 print arrays.keys()
-cluster_assinmen = {}
+cluster_assinment = {}
 centroids ={}
 heterogeneity_values = []
 for k in k_list:
-    cluster_assinmen[k] = arrays['cluster_assignment_{:d}'.format(k)]
+    cluster_assinment[k] = arrays['cluster_assignment_{:d}'.format(k)]
     centroids[k] = arrays['centroids_{:d}'.format(k)]
-    quality = compute_heterogeneity(tf_idf,cluster_assinmen[k], centroids[k], k)
+    quality = compute_heterogeneity(tf_idf,cluster_assinment[k], centroids[k], k)
     heterogeneity_values.append(quality)
 
 plt.plot(k_list, heterogeneity_values, linewidth = 4)
@@ -319,9 +348,81 @@ plt.xlabel(' number of clusters')
 plt.ylabel('heterogeneity')
 
 
-k = 10
 
-model = NearestNeighbors(metric= 'euclidean' , algorithm = 'brute')
-model.fit(tf_idf[cluster_assinmen[k] == 1])
-distances, indices = model.kneighbors((centroids[1])[1], n_neighbors = 10)
-print wiki.filter(items = indices, axis =0)
+with open('people_wiki_map_index_to_word.json') as json_data:
+    map_file = json.load(json_data)
+
+def map_index_to_word(words_index):
+    a =[]
+    for i in range(len(words_index)):
+        for key,value in map_file.iteritems():
+            if value == words_index[i]:
+                a.append(key)
+    return a
+
+
+def visualize_document_clusters(cluster_assinment, centroids, data,k , num_nn=8, display = True ):
+    '''
+    for a given number of cluster(k), for center of each cluster\
+    it gives the name of the nearest neighbors belong to that cluster\
+    as the represantative of that cluster if display is True
+    also it gives the highest tf_idf wights of the centroids
+    num_nn : number of nearest neighbors
+    '''
+    for j in range(k):
+        print " cluter number %d out of %d clusters" %(j, k)
+        b = np.argsort((centroids[k])[j].flatten())[-5:][::-1]
+        print map_index_to_word(b)
+        member_j_of_k = np.array([cluster_assinment[k] == j] , dtype = int)
+        indice_member_j_of_k = (np.nonzero(member_j_of_k))[1]
+        print " number of dtps in this cluster", len(indice_member_j_of_k)
+
+
+
+    if display:
+        # for all cluster in a k cluster structure
+        for j in range(k):
+            print " cluter number %d out of %d clusters" %(j, k)
+            # identify the member of jth cluster
+            member_j_of_k = np.array([cluster_assinment[k] == j] , dtype = int)
+            # store the indices of that cluster
+            indice_member_j_of_k = (np.nonzero(member_j_of_k))[1]
+            print " number of dtps in this cluster", len(indice_member_j_of_k)
+            # compute distance of the centroid to all dtps belong to that cluster
+            dis = sklearn.metrics.pairwise.euclidean_distances\
+            ((centroids[k])[j].reshape(1,data.shape[1]) , \
+            data[indice_member_j_of_k]).flatten()
+            # find the arguments that sorts distance
+            a = np.argsort(dis)
+            # find the original index that sort distance
+            # these indices belong to cluster j and they are the closest to\
+            # center of this cluster
+            indice_nearest = indice_member_j_of_k[a]
+            # refer to wiki or name and text of these indices
+            nearest = wiki.filter(items = indice_nearest[0:num_nn], axis = 0)
+
+            for i in range(num_nn):
+                print nearest.iloc[i][ 'name']
+                print (nearest.iloc[i][ 'text'])[0:180]
+            print"\n"
+
+    return
+
+# this part shows the effect of k
+# for a small k like 2:
+# we have a mixed content and the numbers od datas in each cluster is large
+
+# as k increases new themes appeares
+# data points breaks into different clusters so the # of data points in each \
+#in each cluster decreases
+# still for some clusters there is mixed content and they have # of dtpts
+# for a large k like 100:
+# datas which was in the same cluster before, now goes to different clusters
+# means that realated articles are seperated
+# however, clusters becom more specific and purest.
+
+# for this problem the best k lies between 25 and 100
+# where similar datas haven't broken apart yet, while discovering new ones
+show_result_5 = 1
+if show_result_5 ==1 :
+    visualize_document_clusters(cluster_assinment, centroids, tf_idf, k=100, display = False)
